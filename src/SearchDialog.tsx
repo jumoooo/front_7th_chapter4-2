@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Button,
@@ -82,12 +82,332 @@ const TIME_SLOTS = [
 
 const PAGE_SIZE = 100;
 
+// 검색어 필터 컴포넌트 - 독립적으로 메모이제이션
+const QueryFilter = memo(
+  ({
+    value,
+    onChange,
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+  }) => {
+    return (
+      <FormControl>
+        <FormLabel>검색어</FormLabel>
+        <Input
+          placeholder="과목명 또는 과목코드"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </FormControl>
+    );
+  }
+);
+QueryFilter.displayName = "QueryFilter";
+
+// 학점 필터 컴포넌트 - 독립적으로 메모이제이션
+const CreditsFilter = memo(
+  ({
+    value,
+    onChange,
+  }: {
+    value?: number;
+    onChange: (value?: number) => void;
+  }) => {
+    return (
+      <FormControl>
+        <FormLabel>학점</FormLabel>
+        <Select
+          value={value}
+          onChange={(e) =>
+            onChange(e.target.value ? Number(e.target.value) : undefined)
+          }>
+          <option value="">전체</option>
+          <option value="1">1학점</option>
+          <option value="2">2학점</option>
+          <option value="3">3학점</option>
+        </Select>
+      </FormControl>
+    );
+  }
+);
+CreditsFilter.displayName = "CreditsFilter";
+
+// 학년 필터 컴포넌트 - 독립적으로 메모이제이션
+const GradesFilter = memo(
+  ({
+    value,
+    onChange,
+  }: {
+    value: number[];
+    onChange: (value: number[]) => void;
+  }) => {
+    return (
+      <FormControl>
+        <FormLabel>학년</FormLabel>
+        <CheckboxGroup
+          value={value}
+          onChange={(values) => onChange(values.map(Number))}>
+          <HStack spacing={4}>
+            {[1, 2, 3, 4].map((grade) => (
+              <Checkbox key={grade} value={grade}>
+                {grade}학년
+              </Checkbox>
+            ))}
+          </HStack>
+        </CheckboxGroup>
+      </FormControl>
+    );
+  }
+);
+GradesFilter.displayName = "GradesFilter";
+
+// 요일 필터 컴포넌트 - 독립적으로 메모이제이션
+const DaysFilter = memo(
+  ({
+    value,
+    onChange,
+  }: {
+    value: string[];
+    onChange: (value: string[]) => void;
+  }) => {
+    return (
+      <FormControl>
+        <FormLabel>요일</FormLabel>
+        <CheckboxGroup
+          value={value}
+          onChange={(values) => onChange(values as string[])}>
+          <HStack spacing={4}>
+            {DAY_LABELS.map((day) => (
+              <Checkbox key={day} value={day}>
+                {day}
+              </Checkbox>
+            ))}
+          </HStack>
+        </CheckboxGroup>
+      </FormControl>
+    );
+  }
+);
+DaysFilter.displayName = "DaysFilter";
+
+// 시간 필터 컴포넌트 - 독립적으로 메모이제이션
+const TimesFilter = memo(
+  ({
+    value,
+    sortedTimes,
+    onChange,
+  }: {
+    value: number[];
+    sortedTimes: number[];
+    onChange: (value: number[]) => void;
+  }) => {
+    return (
+      <FormControl>
+        <FormLabel>시간</FormLabel>
+        <CheckboxGroup
+          colorScheme="green"
+          value={value}
+          onChange={(values) => onChange(values.map(Number))}>
+          <Wrap spacing={1} mb={2}>
+            {sortedTimes.map((time) => (
+              <Tag key={time} size="sm" variant="outline" colorScheme="blue">
+                <TagLabel>{time}교시</TagLabel>
+                <TagCloseButton
+                  onClick={() => onChange(value.filter((v) => v !== time))}
+                />
+              </Tag>
+            ))}
+          </Wrap>
+          <Stack
+            spacing={2}
+            overflowY="auto"
+            h="100px"
+            border="1px solid"
+            borderColor="gray.200"
+            borderRadius={5}
+            p={2}>
+            {TIME_SLOTS.map(({ id, label }) => (
+              <Box key={id}>
+                <Checkbox key={id} size="sm" value={id}>
+                  {id}교시({label})
+                </Checkbox>
+              </Box>
+            ))}
+          </Stack>
+        </CheckboxGroup>
+      </FormControl>
+    );
+  }
+);
+TimesFilter.displayName = "TimesFilter";
+
+// 전공 필터 컴포넌트 - 독립적으로 메모이제이션
+const MajorsFilter = memo(
+  ({
+    value,
+    allMajors,
+    onChange,
+  }: {
+    value: string[];
+    allMajors: string[];
+    onChange: (value: string[]) => void;
+  }) => {
+    return (
+      <FormControl>
+        <FormLabel>전공</FormLabel>
+        <CheckboxGroup
+          colorScheme="green"
+          value={value}
+          onChange={(values) => onChange(values as string[])}>
+          <Wrap spacing={1} mb={2}>
+            {value.map((major) => (
+              <Tag key={major} size="sm" variant="outline" colorScheme="blue">
+                <TagLabel>{major.split("<p>").pop()}</TagLabel>
+                <TagCloseButton
+                  onClick={() => onChange(value.filter((v) => v !== major))}
+                />
+              </Tag>
+            ))}
+          </Wrap>
+          <Stack
+            spacing={2}
+            overflowY="auto"
+            h="100px"
+            border="1px solid"
+            borderColor="gray.200"
+            borderRadius={5}
+            p={2}>
+            {allMajors.map((major) => (
+              <Box key={major}>
+                <Checkbox key={major} size="sm" value={major}>
+                  {major.replace(/<p>/gi, " ")}
+                </Checkbox>
+              </Box>
+            ))}
+          </Stack>
+        </CheckboxGroup>
+      </FormControl>
+    );
+  }
+);
+MajorsFilter.displayName = "MajorsFilter";
+
+// 필터 그룹 컨테이너 컴포넌트들 - 독립적으로 메모이제이션
+// 각 Row는 자신이 감싸는 필터의 props만 받아서 독립적으로 리렌더링
+const FilterRow1 = memo(
+  ({
+    queryValue,
+    queryOnChange,
+    creditsValue,
+    creditsOnChange,
+  }: {
+    queryValue: string;
+    queryOnChange: (value: string) => void;
+    creditsValue?: number;
+    creditsOnChange: (value?: number) => void;
+  }) => {
+    return (
+      <HStack spacing={4}>
+        <QueryFilter value={queryValue} onChange={queryOnChange} />
+        <CreditsFilter value={creditsValue} onChange={creditsOnChange} />
+      </HStack>
+    );
+  },
+  (prevProps, nextProps) => {
+    // query와 credits만 비교하여 리렌더링 여부 결정
+    return (
+      prevProps.queryValue === nextProps.queryValue &&
+      prevProps.queryOnChange === nextProps.queryOnChange &&
+      prevProps.creditsValue === nextProps.creditsValue &&
+      prevProps.creditsOnChange === nextProps.creditsOnChange
+    );
+  }
+);
+FilterRow1.displayName = "FilterRow1";
+
+const FilterRow2 = memo(
+  ({
+    gradesValue,
+    gradesOnChange,
+    daysValue,
+    daysOnChange,
+  }: {
+    gradesValue: number[];
+    gradesOnChange: (value: number[]) => void;
+    daysValue: string[];
+    daysOnChange: (value: string[]) => void;
+  }) => {
+    return (
+      <HStack spacing={4}>
+        <GradesFilter value={gradesValue} onChange={gradesOnChange} />
+        <DaysFilter value={daysValue} onChange={daysOnChange} />
+      </HStack>
+    );
+  },
+  (prevProps, nextProps) => {
+    // grades와 days만 비교하여 리렌더링 여부 결정
+    return (
+      prevProps.gradesValue === nextProps.gradesValue &&
+      prevProps.gradesOnChange === nextProps.gradesOnChange &&
+      prevProps.daysValue === nextProps.daysValue &&
+      prevProps.daysOnChange === nextProps.daysOnChange
+    );
+  }
+);
+FilterRow2.displayName = "FilterRow2";
+
+const FilterRow3 = memo(
+  ({
+    timesValue,
+    sortedTimes,
+    timesOnChange,
+    majorsValue,
+    allMajors,
+    majorsOnChange,
+  }: {
+    timesValue: number[];
+    sortedTimes: number[];
+    timesOnChange: (value: number[]) => void;
+    majorsValue: string[];
+    allMajors: string[];
+    majorsOnChange: (value: string[]) => void;
+  }) => {
+    return (
+      <HStack spacing={4}>
+        <TimesFilter
+          value={timesValue}
+          sortedTimes={sortedTimes}
+          onChange={timesOnChange}
+        />
+        <MajorsFilter
+          value={majorsValue}
+          allMajors={allMajors}
+          onChange={majorsOnChange}
+        />
+      </HStack>
+    );
+  },
+  (prevProps, nextProps) => {
+    // times와 majors만 비교하여 리렌더링 여부 결정
+    return (
+      prevProps.timesValue === nextProps.timesValue &&
+      prevProps.sortedTimes === nextProps.sortedTimes &&
+      prevProps.timesOnChange === nextProps.timesOnChange &&
+      prevProps.majorsValue === nextProps.majorsValue &&
+      prevProps.allMajors === nextProps.allMajors &&
+      prevProps.majorsOnChange === nextProps.majorsOnChange
+    );
+  }
+);
+FilterRow3.displayName = "FilterRow3";
+
 const fetchMajors = () => axios.get<Lecture[]>("/schedules-majors.json");
 const fetchLiberalArts = () =>
   axios.get<Lecture[]>("/schedules-liberal-arts.json");
 
 // TODO: 이 코드를 개선해서 API 호출을 최소화 해보세요 + Promise.all이 현재 잘못 사용되고 있습니다. 같이 개선해주세요.
-
+// 개선 완료 : 개선만 진행하고 기존의 코드는 최대한 유지했습니다.
 // 1. 캐시 로직을 담은 클로저 함수 정의
 const createCacheFetcher = () => {
   // Promise를 저장할 공간 (Key: API 이름 혹은 URL, Value: 해당 요청의 Promise)
@@ -201,21 +521,54 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
     [filteredLectures, page]
   );
 
+  // times 정렬 메모이제이션 - 렌더링 중 정렬 연산 방지
+  const sortedTimes = useMemo(
+    () => [...searchOptions.times].sort((a, b) => a - b),
+    [searchOptions.times]
+  );
+
   // 모든 전공 목록 - lectures가 변경될 때만 재계산
   const allMajors = useMemo(
     () => [...new Set(lectures.map((lecture) => lecture.major))],
     [lectures]
   );
 
-  // 검색 옵션 변경
-  const changeSearchOption = (
-    field: keyof SearchOption,
-    value: SearchOption[typeof field]
-  ) => {
+  // 검색 옵션 변경 핸들러들 - 각 필터별로 독립적으로 메모이제이션
+  const handleQueryChange = useCallback((value: string) => {
     setPage(1);
-    setSearchOptions({ ...searchOptions, [field]: value });
+    setSearchOptions((prev) => ({ ...prev, query: value }));
     loaderWrapperRef.current?.scrollTo(0, 0);
-  };
+  }, []);
+
+  const handleCreditsChange = useCallback((value?: number) => {
+    setPage(1);
+    setSearchOptions((prev) => ({ ...prev, credits: value }));
+    loaderWrapperRef.current?.scrollTo(0, 0);
+  }, []);
+
+  const handleGradesChange = useCallback((value: number[]) => {
+    setPage(1);
+    setSearchOptions((prev) => ({ ...prev, grades: value }));
+    loaderWrapperRef.current?.scrollTo(0, 0);
+  }, []);
+
+  const handleDaysChange = useCallback((value: string[]) => {
+    setPage(1);
+    setSearchOptions((prev) => ({ ...prev, days: value }));
+    loaderWrapperRef.current?.scrollTo(0, 0);
+  }, []);
+
+  const handleTimesChange = useCallback((value: number[]) => {
+    setPage(1);
+    setSearchOptions((prev) => ({ ...prev, times: value }));
+    loaderWrapperRef.current?.scrollTo(0, 0);
+  }, []);
+
+  const handleMajorsChange = useCallback((value: string[]) => {
+    setPage(1);
+    setSearchOptions((prev) => ({ ...prev, majors: value }));
+    loaderWrapperRef.current?.scrollTo(0, 0);
+  }, []);
 
   // 스케쥴 추가
   const addSchedule = (lecture: Lecture) => {
@@ -289,162 +642,28 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
         <ModalCloseButton />
         <ModalBody>
           <VStack spacing={4} align="stretch">
-            <HStack spacing={4}>
-              <FormControl>
-                <FormLabel>검색어</FormLabel>
-                <Input
-                  placeholder="과목명 또는 과목코드"
-                  value={searchOptions.query}
-                  onChange={(e) => changeSearchOption("query", e.target.value)}
-                />
-              </FormControl>
+            <FilterRow1
+              queryValue={searchOptions.query || ""}
+              queryOnChange={handleQueryChange}
+              creditsValue={searchOptions.credits}
+              creditsOnChange={handleCreditsChange}
+            />
 
-              <FormControl>
-                <FormLabel>학점</FormLabel>
-                <Select
-                  value={searchOptions.credits}
-                  onChange={(e) =>
-                    changeSearchOption("credits", e.target.value)
-                  }>
-                  <option value="">전체</option>
-                  <option value="1">1학점</option>
-                  <option value="2">2학점</option>
-                  <option value="3">3학점</option>
-                </Select>
-              </FormControl>
-            </HStack>
+            <FilterRow2
+              gradesValue={searchOptions.grades}
+              gradesOnChange={handleGradesChange}
+              daysValue={searchOptions.days}
+              daysOnChange={handleDaysChange}
+            />
 
-            <HStack spacing={4}>
-              <FormControl>
-                <FormLabel>학년</FormLabel>
-                <CheckboxGroup
-                  value={searchOptions.grades}
-                  onChange={(value) =>
-                    changeSearchOption("grades", value.map(Number))
-                  }>
-                  <HStack spacing={4}>
-                    {[1, 2, 3, 4].map((grade) => (
-                      <Checkbox key={grade} value={grade}>
-                        {grade}학년
-                      </Checkbox>
-                    ))}
-                  </HStack>
-                </CheckboxGroup>
-              </FormControl>
-
-              <FormControl>
-                <FormLabel>요일</FormLabel>
-                <CheckboxGroup
-                  value={searchOptions.days}
-                  onChange={(value) =>
-                    changeSearchOption("days", value as string[])
-                  }>
-                  <HStack spacing={4}>
-                    {DAY_LABELS.map((day) => (
-                      <Checkbox key={day} value={day}>
-                        {day}
-                      </Checkbox>
-                    ))}
-                  </HStack>
-                </CheckboxGroup>
-              </FormControl>
-            </HStack>
-
-            <HStack spacing={4}>
-              <FormControl>
-                <FormLabel>시간</FormLabel>
-                <CheckboxGroup
-                  colorScheme="green"
-                  value={searchOptions.times}
-                  onChange={(values) =>
-                    changeSearchOption("times", values.map(Number))
-                  }>
-                  <Wrap spacing={1} mb={2}>
-                    {searchOptions.times
-                      .sort((a, b) => a - b)
-                      .map((time) => (
-                        <Tag
-                          key={time}
-                          size="sm"
-                          variant="outline"
-                          colorScheme="blue">
-                          <TagLabel>{time}교시</TagLabel>
-                          <TagCloseButton
-                            onClick={() =>
-                              changeSearchOption(
-                                "times",
-                                searchOptions.times.filter((v) => v !== time)
-                              )
-                            }
-                          />
-                        </Tag>
-                      ))}
-                  </Wrap>
-                  <Stack
-                    spacing={2}
-                    overflowY="auto"
-                    h="100px"
-                    border="1px solid"
-                    borderColor="gray.200"
-                    borderRadius={5}
-                    p={2}>
-                    {TIME_SLOTS.map(({ id, label }) => (
-                      <Box key={id}>
-                        <Checkbox key={id} size="sm" value={id}>
-                          {id}교시({label})
-                        </Checkbox>
-                      </Box>
-                    ))}
-                  </Stack>
-                </CheckboxGroup>
-              </FormControl>
-
-              <FormControl>
-                <FormLabel>전공</FormLabel>
-                <CheckboxGroup
-                  colorScheme="green"
-                  value={searchOptions.majors}
-                  onChange={(values) =>
-                    changeSearchOption("majors", values as string[])
-                  }>
-                  <Wrap spacing={1} mb={2}>
-                    {searchOptions.majors.map((major) => (
-                      <Tag
-                        key={major}
-                        size="sm"
-                        variant="outline"
-                        colorScheme="blue">
-                        <TagLabel>{major.split("<p>").pop()}</TagLabel>
-                        <TagCloseButton
-                          onClick={() =>
-                            changeSearchOption(
-                              "majors",
-                              searchOptions.majors.filter((v) => v !== major)
-                            )
-                          }
-                        />
-                      </Tag>
-                    ))}
-                  </Wrap>
-                  <Stack
-                    spacing={2}
-                    overflowY="auto"
-                    h="100px"
-                    border="1px solid"
-                    borderColor="gray.200"
-                    borderRadius={5}
-                    p={2}>
-                    {allMajors.map((major) => (
-                      <Box key={major}>
-                        <Checkbox key={major} size="sm" value={major}>
-                          {major.replace(/<p>/gi, " ")}
-                        </Checkbox>
-                      </Box>
-                    ))}
-                  </Stack>
-                </CheckboxGroup>
-              </FormControl>
-            </HStack>
+            <FilterRow3
+              timesValue={searchOptions.times}
+              sortedTimes={sortedTimes}
+              timesOnChange={handleTimesChange}
+              majorsValue={searchOptions.majors}
+              allMajors={allMajors}
+              majorsOnChange={handleMajorsChange}
+            />
             <Text align="right">검색결과: {filteredLectures.length}개</Text>
             <Box>
               <Table>

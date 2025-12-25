@@ -17,7 +17,7 @@ import { Schedule } from "./types.ts";
 import { fill2, parseHnM } from "./utils.ts";
 import { useDndContext, useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { ComponentProps, Fragment } from "react";
+import { ComponentProps, Fragment, memo, useMemo } from "react";
 
 interface Props {
   tableId: string;
@@ -38,25 +38,35 @@ const TIMES = [
     .map((v) => `${parseHnM(v)}~${parseHnM(v + 50 * 분)}`),
 ] as const;
 
-const ScheduleTable = ({ tableId, schedules, onScheduleTimeClick, onDeleteButtonClick }: Props) => {
+// ScheduleTable 컴포넌트 메모이제이션 - 드래그 중 불필요한 리렌더링 방지
+const ScheduleTable = memo(({ tableId, schedules, onScheduleTimeClick, onDeleteButtonClick }: Props) => {
 
-  const getColor = (lectureId: string): string => {
+  // 색상 맵 메모이제이션 - 한 번만 계산하고 재사용
+  const colorMap = useMemo(() => {
     const lectures = [...new Set(schedules.map(({ lecture }) => lecture.id))];
     const colors = ["#fdd", "#ffd", "#dff", "#ddf", "#fdf", "#dfd"];
-    return colors[lectures.indexOf(lectureId) % colors.length];
+    const map = new Map<string, string>();
+    lectures.forEach((lectureId, index) => {
+      map.set(lectureId, colors[index % colors.length]);
+    });
+    return map;
+  }, [schedules]);
+
+  const getColor = (lectureId: string): string => {
+    return colorMap.get(lectureId) || "#fdd";
   };
 
   const dndContext = useDndContext();
 
-  const getActiveTableId = () => {
+  // activeTableId 메모이제이션 - dndContext.active?.id가 변경될 때만 재계산
+  // 드래그 중에는 activeId만 변경되므로, 이 값만 추적하여 불필요한 재계산 방지
+  const activeTableId = useMemo(() => {
     const activeId = dndContext.active?.id;
     if (activeId) {
       return String(activeId).split(":")[0];
     }
     return null;
-  }
-
-  const activeTableId = getActiveTableId();
+  }, [dndContext.active?.id]);
 
   return (
     <Box
@@ -113,7 +123,7 @@ const ScheduleTable = ({ tableId, schedules, onScheduleTimeClick, onDeleteButton
 
       {schedules.map((schedule, index) => (
         <DraggableSchedule
-          key={`${schedule.lecture.title}-${index}`}
+          key={`${tableId}:${index}`}
           id={`${tableId}:${index}`}
           data={schedule}
           bg={getColor(schedule.lecture.id)}
@@ -125,9 +135,20 @@ const ScheduleTable = ({ tableId, schedules, onScheduleTimeClick, onDeleteButton
       ))}
     </Box>
   );
-};
+}, (prevProps, nextProps) => {
+  // 커스텀 비교 함수 - schedules 배열 참조와 tableId만 비교
+  // onScheduleTimeClick, onDeleteButtonClick은 함수이므로 참조 비교
+  // 드래그 중에는 schedules와 tableId가 변경되지 않으므로 리렌더링 방지
+  return (
+    prevProps.tableId === nextProps.tableId &&
+    prevProps.schedules === nextProps.schedules &&
+    prevProps.onScheduleTimeClick === nextProps.onScheduleTimeClick &&
+    prevProps.onDeleteButtonClick === nextProps.onDeleteButtonClick
+  );
+});
 
-const DraggableSchedule = ({
+// DraggableSchedule 컴포넌트 메모이제이션 - 드래그 중 불필요한 리렌더링 방지
+const DraggableSchedule = memo(({
  id,
  data,
  bg,
@@ -175,6 +196,14 @@ const DraggableSchedule = ({
       </PopoverContent>
     </Popover>
   );
-}
+}, (prevProps, nextProps) => {
+  // 커스텀 비교 함수 - id, data, bg만 비교 (onDeleteButtonClick은 무시)
+  // 드래그 중에는 id, data, bg가 변경되지 않으므로 리렌더링 방지
+  return (
+    prevProps.id === nextProps.id &&
+    prevProps.data === nextProps.data &&
+    prevProps.bg === nextProps.bg
+  );
+});
 
 export default ScheduleTable;
